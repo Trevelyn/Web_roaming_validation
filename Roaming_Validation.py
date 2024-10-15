@@ -7,6 +7,7 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import StaleElementReferenceException, TimeoutException
 import time
 
 class ChromeRoamingValidation(unittest.TestCase):
@@ -15,7 +16,9 @@ class ChromeRoamingValidation(unittest.TestCase):
         """Set up Chrome and Edge drivers."""
         try:
             # Initialize Chrome driver
-            self.chrome_driver = webdriver.Chrome()
+            chrome_options = webdriver.ChromeOptions()
+            chrome_options.add_argument("--incognito")
+            self.chrome_driver = webdriver.Chrome(service=webdriver.chrome.service.Service(ChromeDriverManager().install()), options=chrome_options)
             self.chrome_driver.set_window_size(945, 1012)
         except Exception as e:
             print(f"Error during Chrome setup: {e}")
@@ -23,7 +26,9 @@ class ChromeRoamingValidation(unittest.TestCase):
 
         try:
             # Initialize Edge driver
-            self.edge_driver = webdriver.Edge()
+            edge_options = webdriver.EdgeOptions()
+            edge_options.add_argument("-inprivate")
+            self.edge_driver = webdriver.Edge(service=webdriver.edge.service.Service(EdgeChromiumDriverManager().install()), options=edge_options)
             self.edge_driver.set_window_size(945, 1012)
         except Exception as e:
             print(f"Error during Edge setup: {e}")
@@ -43,36 +48,51 @@ class ChromeRoamingValidation(unittest.TestCase):
         try:
             # Navigate to the login page
             driver.get("https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=95de633a-083e-42f5-b444-a4295d8e9314&scope=openid%20profile%20offline_access&redirect_uri=https%3A%2F%2Fwhiteboard.office.com%2Fmsalv2redirect%2F&client-request-id=a8aaaed1-8c3d-474c-8362-d2eab705db2b&response_mode=fragment&response_type=code&x-client-SKU=msal.js.browser&x-client-VER=2.33.0&client_info=1&code_challenge=7HUBeVEYTl_-ByIXjVQhO2knL0KkaST8F6q4IHwz3yE&code_challenge_method=S256&prompt=select_account&nonce=10a4ce50-b54c-4dbd-8af8-38d85db768f1&state=eyJpZCI6IjQ5NGRkZWUwLTBiYjgtNDAxMi05OTUwLTY5ZTZjOWYwYjI3MCIsIm1ldGEiOnsiaW50ZXJhY3Rpb25UeXBlIjoicmVkaXJlY3QifX0%3D&claims=%7B%22access_token%22%3A%7B%22xms_cc%22%3A%7B%22values%22%3A%5B%22cp1%22%5D%7D%7D%7D&sso_reload=true")
+
+            # Retry logic for finding and interacting with elements to avoid stale references
+            def safe_find_element(driver, by, value, retries=3):
+                for _ in range(retries):
+                    try:
+                        element = WebDriverWait(driver, 10).until(EC.presence_of_element_located((by, value)))
+                        return element
+                    except StaleElementReferenceException:
+                        print("Stale element, retrying...")
+                raise Exception(f"Element {value} not stable after {retries} retries")
             
             # Enter email and proceed
-            WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.ID, "i0116")))
-            driver.find_element(By.ID, "i0116").send_keys("IsaiahL@M365x54705503.OnMicrosoft.com")
-            driver.find_element(By.ID, "i0116").send_keys(Keys.ENTER)
+            email_input = safe_find_element(driver, By.ID, "i0116")
+            email_input.send_keys("IsaiahL@M365x41049209.OnMicrosoft.com")
+            email_input.send_keys(Keys.ENTER)
 
             # Enter password and proceed
-            WebDriverWait(driver, 30).until(EC.presence_of_element_located((By.ID, "i0118")))
-            driver.find_element(By.ID, "i0118").send_keys("Kenya@2023")
-            driver.find_element(By.ID, "i0118").send_keys(Keys.ENTER)
+            password_input = safe_find_element(driver, By.ID, "i0118")
+            password_input.send_keys("Kenya@2023")
+            password_input.send_keys(Keys.ENTER)
 
             # Select "Sign in another way"
-            WebDriverWait(driver, 30).until(EC.presence_of_element_located((By.ID, "signInAnotherWay")))
-            driver.find_element(By.ID, "signInAnotherWay").click()
+            sign_in_another_way_button = safe_find_element(driver, By.ID, "signInAnotherWay")
+            sign_in_another_way_button.click()
 
             # Select the third option
-            WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CSS_SELECTOR, ".row:nth-child(3) .text-left > div")))
-            driver.find_element(By.CSS_SELECTOR, ".row:nth-child(3) .text-left > div").click()
+            third_option = safe_find_element(driver, By.CSS_SELECTOR, ".row:nth-child(3) .text-left > div")
+            third_option.click()
 
             # Click on the authentication code field
-            WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.ID, "idTxtBx_SAOTCC_OTC")))
-            driver.find_element(By.ID, "idTxtBx_SAOTCC_OTC").click()
+            auth_code_field = safe_find_element(driver, By.ID, "idTxtBx_SAOTCC_OTC")
+            auth_code_field.click()
 
             # Wait for the user to manually enter the authentication code
             time.sleep(30)  # Adjust sleep time based on how long it takes to receive the 2FA code
 
             # Click continue after entering the authentication code
-            driver.find_element(By.ID, "idSubmit_SAOTCC_Continue").click()
+            continue_button = safe_find_element(driver, By.ID, "idSubmit_SAOTCC_Continue")
+            continue_button.click()
+            
+        except TimeoutException:
+            print(f"Element not found or timed out.")
         except Exception as e:
             print(f"Error during login and authentication: {e}")
+
 
     def toggle_connected_experience(self, driver, expected_state):
         """Toggle the connected experience setting and verify its state."""
@@ -80,7 +100,7 @@ class ChromeRoamingValidation(unittest.TestCase):
             return
         try:
             # Open the settings menu
-            WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.ID, "boardPickerSettingsButton")))
+            WebDriverWait(driver, 5).until(EC.element_to_be_clickable((By.ID, "boardPickerSettingsButton")))
             settings_button = driver.find_element(By.ID, "boardPickerSettingsButton")
             settings_button.click()
 
@@ -91,13 +111,13 @@ class ChromeRoamingValidation(unittest.TestCase):
             privacy_button = driver.find_element(By.CSS_SELECTOR, ".privacyAndSecurityButton .ms-ContextualMenu-itemText")
             privacy_button.click()
 
-            # Toggle the connected experience setting
-            toggle_element = driver.find_element(By.CSS_SELECTOR, "#Toggle65 > .ms-Toggle-thumb")
-            toggle_element.click()
+            # Toggle the connected experience setting using the provided XPath
+            toggle_button = driver.find_element(By.XPATH, "//div[2]/div[2]/div/button")
+            toggle_button.click()
 
-            # Verify the state of the toggle
-            toggle_state = driver.find_element(By.CSS_SELECTOR, "#Toggle65").get_attribute("aria-checked")
-            self.assertNotEqual(toggle_state, expected_state, f"Toggle65 is not switched to {toggle_state}")
+            # Verify the state of the toggle using XPath
+            toggle_state = driver.find_element(By.XPATH, "//div[2]/div[2]/div/button").get_attribute("aria-checked")
+            self.assertNotEqual(toggle_state, expected_state, f"Toggle53 is not switched to {expected_state}")
         except Exception as e:
             print(f"Error during toggling connected experience: {e}")
 
@@ -110,7 +130,7 @@ class ChromeRoamingValidation(unittest.TestCase):
         self.toggle_connected_experience(self.chrome_driver, "false")
 
         # Sleep to allow settings to take effect
-        time.sleep(5)
+        time.sleep(30)
 
         # Login and authenticate in Edge
         self.login_and_authenticate(self.edge_driver)
@@ -122,8 +142,7 @@ class ChromeRoamingValidation(unittest.TestCase):
         self.toggle_connected_experience(self.chrome_driver, "true")
 
         # Sleep to allow settings to take effect
-        time.sleep(5)
-
+        time.sleep(30)
         # Refresh Edge and verify the toggle state again
         if self.edge_driver is not None:
             self.edge_driver.refresh()
@@ -138,15 +157,15 @@ class ChromeRoamingValidation(unittest.TestCase):
             privacy_button = self.edge_driver.find_element(By.CSS_SELECTOR, ".privacyAndSecurityButton .ms-ContextualMenu-itemText")
             privacy_button.click()
 
-            # Verify the toggle state in Edge
-            toggle_state_edge_after = self.edge_driver.find_element(By.CSS_SELECTOR, "#Toggle65").get_attribute("aria-checked")
+            # Verify the toggle state in Edge using the XPath
+            toggle_state_edge_after = self.edge_driver.find_element(By.XPATH, "//div[2]/div[2]/div/button").get_attribute("aria-checked")
             self.assertEqual(toggle_state_edge_after, "true", "Edge toggle is not the same as Chrome toggle")
 
             # Switch back to Chrome and turn off the toggle
             self.toggle_connected_experience(self.chrome_driver, "false")
 
             # Sleep to allow settings to take effect
-            time.sleep(5)
+            time.sleep(10)
 
             # Refresh Edge and verify the toggle state again
             self.edge_driver.refresh()
@@ -161,9 +180,10 @@ class ChromeRoamingValidation(unittest.TestCase):
             privacy_button = self.edge_driver.find_element(By.CSS_SELECTOR, ".privacyAndSecurityButton .ms-ContextualMenu-itemText")
             privacy_button.click()
 
-            # Verify the toggle state in Edge
-            toggle_state_edge_final = self.edge_driver.find_element(By.CSS_SELECTOR, "#Toggle65").get_attribute("aria-checked")
+            # Verify the toggle state in Edge using the XPath
+            toggle_state_edge_final = self.edge_driver.find_element(By.XPATH, "//div[@id='fluent-default-layer-host']/div[2]/div/div/div/div/div/div[3]/div[2]/div[2]/div/button").get_attribute("aria-checked")
             self.assertEqual(toggle_state_edge_final, "false", "Edge toggle is not the same as Chrome toggle")
+
 
 if __name__ == "__main__":
     unittest.main()
