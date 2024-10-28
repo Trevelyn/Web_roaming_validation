@@ -10,7 +10,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import StaleElementReferenceException, TimeoutException
 import time
 
-class ChromeRoamingValidation(unittest.TestCase):
+class Cross_process(unittest.TestCase):
 
     def setUp(self):
         """Set up Chrome and Edge drivers."""
@@ -69,6 +69,9 @@ class ChromeRoamingValidation(unittest.TestCase):
             password_input.send_keys("Kenya@2023")
             password_input.send_keys(Keys.ENTER)
 
+            sign_in_button = safe_find_element(driver, By.XPATH, "//input[@id='idSIButton9']")
+            sign_in_button.click()
+
             # Select "Sign in another way"
             sign_in_another_way_button = safe_find_element(driver, By.ID, "signInAnotherWay")
             sign_in_another_way_button.click()
@@ -99,25 +102,36 @@ class ChromeRoamingValidation(unittest.TestCase):
         if driver is None:
             return
         try:
-            # Open the settings menu
-            WebDriverWait(driver, 5).until(EC.element_to_be_clickable((By.ID, "boardPickerSettingsButton")))
-            settings_button = driver.find_element(By.ID, "boardPickerSettingsButton")
+            # Wait and click the settings button
+            settings_button = WebDriverWait(driver, 5).until(EC.element_to_be_clickable((By.ID, "boardPickerSettingsButton")))
             settings_button.click()
 
-            # Move to the privacy button and click it
-            actions = ActionChains(driver)
-            actions.move_to_element(settings_button).perform()
-
-            privacy_button = driver.find_element(By.CSS_SELECTOR, ".privacyAndSecurityButton .ms-ContextualMenu-itemText")
+            # Wait for and click the privacy button
+            privacy_button = WebDriverWait(driver, 5).until(EC.element_to_be_clickable((By.XPATH, "//li[5]/button/div/span")))
             privacy_button.click()
 
-            # Toggle the connected experience setting using the provided XPath
-            toggle_button = driver.find_element(By.XPATH, "//div[2]/div[2]/div/button")
-            toggle_button.click()
+            # Locate the toggle button and check its current state
+            toggle_button = WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.XPATH, "/html/body/div[2]/div[2]/div/div/div/div/div/div[3]/div[2]/div[2]/div/button")))
+            current_state = toggle_button.get_attribute("aria-checked")
 
-            # Verify the state of the toggle using XPath
-            toggle_state = driver.find_element(By.XPATH, "//div[2]/div[2]/div/button").get_attribute("aria-checked")
-            self.assertNotEqual(toggle_state, expected_state, f"Toggle53 is not switched to {expected_state}")
+            # Convert expected_state to string for consistent comparison
+            expected_state = "true" if expected_state == "true" else "false"
+
+            # If the current state is not as expected, click to change it
+            if current_state != expected_state:
+                toggle_button.click()
+                # Wait for the toggle state to change
+                WebDriverWait(driver, 10).until(
+                    lambda d: toggle_button.get_attribute("aria-checked") == expected_state
+                )
+                # Verify the state is now the expected one
+                self.assertEqual(toggle_button.get_attribute("aria-checked"), expected_state,
+                                f"Toggle did not switch to the expected state: aria-checked='{expected_state}'")
+            else:
+                print(f"Toggle is already in the expected state: aria-checked='{expected_state}'")
+
+        except TimeoutException:
+            print("Element timed out while trying to toggle connected experience.")
         except Exception as e:
             print(f"Error during toggling connected experience: {e}")
 
@@ -137,6 +151,7 @@ class ChromeRoamingValidation(unittest.TestCase):
 
         # Verify the toggle state in Edge
         self.toggle_connected_experience(self.edge_driver, "false")
+        time.sleep(30)
 
         # Switch back to Chrome and activate the toggle
         self.toggle_connected_experience(self.chrome_driver, "true")
@@ -146,7 +161,7 @@ class ChromeRoamingValidation(unittest.TestCase):
         # Refresh Edge and verify the toggle state again
         if self.edge_driver is not None:
             self.edge_driver.refresh()
-            WebDriverWait(self.edge_driver, 10).until(EC.presence_of_element_located((By.ID, "boardPickerSettingsButton")))
+            WebDriverWait(self.edge_driver, 30).until(EC.presence_of_element_located((By.ID, "boardPickerSettingsButton")))
             settings_button = self.edge_driver.find_element(By.ID, "boardPickerSettingsButton")
             settings_button.click()
 
@@ -154,22 +169,22 @@ class ChromeRoamingValidation(unittest.TestCase):
             actions = ActionChains(self.edge_driver)
             actions.move_to_element(settings_button).perform()
 
-            privacy_button = self.edge_driver.find_element(By.CSS_SELECTOR, ".privacyAndSecurityButton .ms-ContextualMenu-itemText")
+            privacy_button = self.edge_driver.find_element(By.XPATH, ".//li[5]/button/div/span")
             privacy_button.click()
 
             # Verify the toggle state in Edge using the XPath
-            toggle_state_edge_after = self.edge_driver.find_element(By.XPATH, "//div[2]/div[2]/div/button").get_attribute("aria-checked")
+            toggle_state_edge_after = self.edge_driver.find_element(By.XPATH, "/html/body/div[2]/div[2]/div/div/div/div/div/div[3]/div[2]/div[2]/div/button").get_attribute("aria-checked")
             self.assertEqual(toggle_state_edge_after, "true", "Edge toggle is not the same as Chrome toggle")
 
             # Switch back to Chrome and turn off the toggle
             self.toggle_connected_experience(self.chrome_driver, "false")
 
             # Sleep to allow settings to take effect
-            time.sleep(10)
+            time.sleep(30)
 
             # Refresh Edge and verify the toggle state again
             self.edge_driver.refresh()
-            WebDriverWait(self.edge_driver, 10).until(EC.presence_of_element_located((By.ID, "boardPickerSettingsButton")))
+            WebDriverWait(self.edge_driver, 5).until(EC.presence_of_element_located((By.ID, "boardPickerSettingsButton")))
             settings_button = self.edge_driver.find_element(By.ID, "boardPickerSettingsButton")
             settings_button.click()
 
@@ -177,11 +192,11 @@ class ChromeRoamingValidation(unittest.TestCase):
             actions = ActionChains(self.edge_driver)
             actions.move_to_element(settings_button).perform()
 
-            privacy_button = self.edge_driver.find_element(By.CSS_SELECTOR, ".privacyAndSecurityButton .ms-ContextualMenu-itemText")
+            privacy_button = self.edge_driver.find_element(By.XPATH, "//li[5]/button/div/span")
             privacy_button.click()
 
             # Verify the toggle state in Edge using the XPath
-            toggle_state_edge_final = self.edge_driver.find_element(By.XPATH, "//div[@id='fluent-default-layer-host']/div[2]/div/div/div/div/div/div[3]/div[2]/div[2]/div/button").get_attribute("aria-checked")
+            toggle_state_edge_final = self.edge_driver.find_element(By.XPATH, "/html/body/div[2]/div[2]/div/div/div/div/div/div[3]/div[2]/div[2]/div/button").get_attribute("aria-checked")
             self.assertEqual(toggle_state_edge_final, "false", "Edge toggle is not the same as Chrome toggle")
 
 
